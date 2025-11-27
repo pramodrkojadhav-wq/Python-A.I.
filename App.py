@@ -1,4 +1,3 @@
-
 import os
 from typing import Dict, List
 
@@ -7,8 +6,24 @@ from google import genai
 from google.genai import types
 
 
+# =============================
+# 🔑 API Key helper
+# =============================
+def get_api_key() -> str:
+    """
+    Prefer Streamlit secrets, then fall back to environment variables.
+    No hardcoded keys in code, safe for public repos.
+    """
+    # 1) Streamlit secrets (from .streamlit/secrets.toml or Streamlit Cloud)
+    if "GEMINI_API_KEY" in st.secrets:
+        return st.secrets["GEMINI_API_KEY"]
+
+    # 2) Environment variables as fallback
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+
+
 # -----------------------------
-# Config
+# Streamlit Page Config
 # -----------------------------
 st.set_page_config(
     page_title="Gemini Multi-Persona Chat",
@@ -61,6 +76,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # -----------------------------
 # Personas & models
 # -----------------------------
@@ -100,29 +116,57 @@ PERSONAS: Dict[str, Dict[str, str]] = {
             "Prioritize clarity, structure, and bullet points. Avoid unnecessary fluff."
         ),
     },
+    # --- Extra personas ---
+    "Ad Creative Strategist 🚀": {
+        "emoji": "🚀",
+        "prompt": (
+            "You are a senior ad creative strategist at a global agency. "
+            "Generate campaign territories, platform-specific ideas, hooks, and taglines. "
+            "Keep outputs punchy and insight-led."
+        ),
+    },
+    "Marketing Strategist 📣": {
+        "emoji": "📣",
+        "prompt": (
+            "You are a marketing strategist. "
+            "Think in terms of audiences, funnels, media channels, and brand objectives. "
+            "Recommend clear strategy, messaging, and measurement plans."
+        ),
+    },
+    "Data Storyteller 📈": {
+        "emoji": "📈",
+        "prompt": (
+            "You are a data storyteller. "
+            "Translate numbers into simple narratives, recommend charts, and highlight key insights "
+            "and implications for decisions."
+        ),
+    },
+    "UX Copywriter ✏️": {
+        "emoji": "✏️",
+        "prompt": (
+            'You are a UX/product copywriter. '
+            "Write short, clear microcopy for buttons, error states, onboarding, and empty states. "
+            "Optimize for clarity and user confidence."
+        ),
+    },
 }
 
+# Model IDs from Gemini API docs (text-focused models).
+# Includes Gemini 3 Pro Preview as the current Gemini 3 text model.
 AVAILABLE_MODELS: List[str] = [
+    "gemini-3-pro-preview", # Gemini 3 Pro (Preview)
+    "gemini-2.5-pro",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
-    "gemini-2.0-pro",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+    "gemini-2.0-flash-lite",
+Hide quoted text
 ]
 
 
 # -----------------------------
-# Helpers
+# Helper functions
 # -----------------------------
-def get_api_key() -> str:
-    """Get API key from sidebar or environment."""
-    sidebar_key = st.session_state.get("sidebar_api_key") or ""
-    if sidebar_key.strip():
-        return sidebar_key.strip()
-
-    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-
-
 def build_prompt(persona_prompt: str, history: List[Dict], user_input: str) -> str:
     """
     Build a single text prompt that includes:
@@ -135,7 +179,7 @@ def build_prompt(persona_prompt: str, history: List[Dict], user_input: str) -> s
 
     # Persona / system behavior
     lines.append(f"System: {persona_prompt}")
-    lines.append("")  # blank line
+    lines.append("") # blank line
 
     # Previous turns
     for msg in history:
@@ -150,6 +194,7 @@ def build_prompt(persona_prompt: str, history: List[Dict], user_input: str) -> s
 
 
 def get_conversation_key(model_name: str, persona_name: str) -> str:
+    """Unique key per (model, persona) combo for separate histories."""
     return f"{model_name}__{persona_name}"
 
 
@@ -160,25 +205,12 @@ if "conversations" not in st.session_state:
     # { conv_key: [ {role: "user"/"assistant", content: str}, ... ] }
     st.session_state.conversations = {}
 
-if "sidebar_api_key" not in st.session_state:
-    st.session_state.sidebar_api_key = ""
-
 
 # -----------------------------
 # Sidebar UI
 # -----------------------------
 with st.sidebar:
     st.title("⚙️ Settings")
-
-    st.markdown("#### 🔑 Gemini API Key")
-    st.session_state.sidebar_api_key = st.text_input(
-        "Paste your Gemini API key",
-        type="password",
-        placeholder="Or set GEMINI_API_KEY / GOOGLE_API_KEY env var",
-        label_visibility="collapsed",
-    )
-
-    st.markdown("---")
 
     st.markdown("#### 🧠 Persona")
     persona_name = st.selectbox("Persona", list(PERSONAS.keys()))
@@ -198,7 +230,7 @@ with st.sidebar:
     model_name = st.selectbox("Gemini model", AVAILABLE_MODELS, index=0)
     st.caption(
         f"Using **{model_name}**. You can change this anytime; "
-        "each persona+model combo keeps its own history."
+        "each persona + model combo keeps its own history."
     )
 
     st.markdown("#### 🎨 Generation settings")
@@ -218,7 +250,7 @@ st.markdown(
     f"""
     <h1 style="margin-bottom: 0.25rem;">{persona['emoji']} Gemini Multi-Persona Chat</h1>
     <p style="color:#9ca3af; margin-bottom: 1.5rem;">
-        Choose a persona & model in the sidebar, then start chatting.
+        Choose a persona & model in the sidebar, then start chatting. 
         Each combination keeps its own conversation history.
     </p>
     """,
@@ -227,9 +259,11 @@ st.markdown(
 
 api_key = get_api_key()
 if not api_key:
-    st.warning(
-        "Please provide your **Gemini API key** in the sidebar or via "
-        "`GEMINI_API_KEY` / `GOOGLE_API_KEY` environment variable."
+    st.error(
+        "No Gemini API key found.\n\n"
+        "Add it to `.streamlit/secrets.toml` as:\n\n"
+        'GEMINI_API_KEY = "your_real_key_here"\n\n'
+        "or set `GEMINI_API_KEY` / `GOOGLE_API_KEY` as an environment variable."
     )
 
 # Determine current conversation bucket
@@ -260,7 +294,7 @@ if api_key:
     user_input = st.chat_input("Type your message and press Enter...")
 else:
     st.chat_input(
-        "Enter your Gemini API key in the sidebar to start.",
+        "Configure GEMINI_API_KEY in Streamlit secrets to start.",
         disabled=True,
     )
 
@@ -278,7 +312,7 @@ if user_input:
 
             prompt = build_prompt(
                 persona_prompt=persona["prompt"],
-                history=messages[:-1],  # previous messages only
+                history=messages[:-1], # previous messages only
                 user_input=user_input,
             )
 
@@ -300,4 +334,4 @@ if user_input:
         except Exception as e:
             error_msg = f"⚠️ Error calling Gemini API: `{e}`"
             placeholder.markdown(error_msg)
-            messages.append({"role": "assistant", "content": error_msg}) 
+            messages.append({"role": "assistant", "content": error_msg})
