@@ -159,8 +159,7 @@ AVAILABLE_MODELS: List[str] = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-Hide quoted text
+    "gemini-2.0-flash-lite"
 ]
 
 
